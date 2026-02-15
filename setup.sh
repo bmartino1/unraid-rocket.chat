@@ -3,11 +3,12 @@
 #  unraid-rocket.chat  –  Setup Script
 #  https://github.com/bmartino1/unraid-rocket.chat
 #
-#  Run once after cloning the repo. Creates directories, generates self-signed
-#  TLS certs, writes the Nginx config, and validates the environment.
+#  Run once after cloning and editing .env.
+#  Creates directories, generates self-signed TLS cert, writes Nginx config.
 #
 #  Usage:
 #    cd /mnt/user/appdata/unraid-rocket.chat
+#    nano .env          # ← Set your IP first!
 #    bash setup.sh
 # =============================================================================
 set -euo pipefail
@@ -17,7 +18,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Colour
+BOLD='\033[1m'
+NC='\033[0m'
 
 info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
 ok()    { echo -e "${GREEN}[ OK ]${NC}  $*"; }
@@ -27,31 +29,48 @@ fail()  { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 # ---- Locate project root (same dir as this script) -------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
-info "Working directory: ${SCRIPT_DIR}"
-
-# ---- Load .env if present ---------------------------------------------------
-ENV_FILE="${SCRIPT_DIR}/.env"
-if [ ! -f "${ENV_FILE}" ]; then
-  fail ".env file not found! Copy .env from the repo or create one. See README.md."
-fi
-
-# Source .env for variable expansion (with safe defaults)
-set -a
-source "${ENV_FILE}" 2>/dev/null || true
-set +a
-
-# Apply defaults for anything not set in .env
-: "${DATA_DIR:=/mnt/user/appdata/unraid-rocket.chat}"
-: "${NGINX_HOST:=localhost}"
-: "${NGINX_HTTPS_PORT:=60443}"
-: "${NGINX_HTTP_PORT:=60080}"
-: "${RC_HOST_PORT:=3000}"
 
 echo ""
 echo "============================================="
 echo "  Rocket.Chat Unraid Stack Setup"
 echo "============================================="
 echo ""
+
+# ---- Load .env --------------------------------------------------------------
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ ! -f "${ENV_FILE}" ]; then
+  fail ".env file not found! This file is required. See README.md."
+fi
+
+# Source .env
+set -a
+source "${ENV_FILE}" 2>/dev/null || true
+set +a
+
+# ---- Validate .env was edited -----------------------------------------------
+if grep -q 'YOUR_UNRAID_IP' "${ENV_FILE}" 2>/dev/null; then
+  echo ""
+  echo -e "${RED}${BOLD}  !! .env has not been configured !!${NC}"
+  echo ""
+  echo "  You must edit .env and replace YOUR_UNRAID_IP with your"
+  echo "  actual Unraid server IP address before running setup."
+  echo ""
+  echo "  Example:  nano ${ENV_FILE}"
+  echo ""
+  echo "  Then change:"
+  echo "    NGINX_HOST=YOUR_UNRAID_IP      →  NGINX_HOST=192.168.1.50"
+  echo "    ROOT_URL=http://YOUR_UNRAID_IP:60080  →  ROOT_URL=http://192.168.1.50:60080"
+  echo ""
+  fail "Edit .env first, then re-run: bash setup.sh"
+fi
+
+# Apply defaults for anything not set
+: "${DATA_DIR:=/mnt/user/appdata/unraid-rocket.chat}"
+: "${NGINX_HOST:=localhost}"
+: "${NGINX_HTTPS_PORT:=60443}"
+: "${NGINX_HTTP_PORT:=60080}"
+: "${RC_HOST_PORT:=3000}"
+
 info "SCRIPT_DIR     = ${SCRIPT_DIR}"
 info "DATA_DIR       = ${DATA_DIR}"
 info "NGINX_HOST     = ${NGINX_HOST}"
@@ -105,12 +124,20 @@ if [ -f "${CERT_CRT}" ] && [ -f "${CERT_KEY}" ]; then
   info "  To regenerate: rm ${CERT_CRT} ${CERT_KEY} && bash setup.sh"
 else
   info "Generating self-signed TLS certificate for '${NGINX_HOST}' ..."
+
+  # Build SAN — include both DNS and IP entries for flexibility
+  SAN="DNS:${NGINX_HOST}"
+  # If NGINX_HOST looks like an IP address, add IP SAN too
+  if echo "${NGINX_HOST}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+    SAN="${SAN},IP:${NGINX_HOST}"
+  fi
+
   openssl req -x509 -nodes -days 3650 \
     -newkey rsa:2048 \
     -keyout "${CERT_KEY}" \
     -out "${CERT_CRT}" \
     -subj "/CN=${NGINX_HOST}/O=Unraid-RocketChat/C=US" \
-    -addext "subjectAltName=DNS:${NGINX_HOST},IP:${NGINX_HOST}" \
+    -addext "subjectAltName=${SAN}" \
     2>/dev/null
   ok "TLS certificate generated (valid 10 years)."
   info "  Cert: ${CERT_CRT}"
@@ -133,16 +160,15 @@ ok "Nginx config written to ${NGINX_CONF}"
 # ---- Copy compose + env into DATA_DIR if running from different location ----
 if [ "${SCRIPT_DIR}" != "${DATA_DIR}" ]; then
   info "Copying compose files into ${DATA_DIR} ..."
-  cp -f "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
-  cp -f "${SCRIPT_DIR}/.env"               "${DATA_DIR}/.env"
-  cp -f "${SCRIPT_DIR}/default.conf.template" "${DATA_DIR}/default.conf.template"
+  cp -f "${SCRIPT_DIR}/docker-compose.yml"      "${DATA_DIR}/docker-compose.yml"
+  cp -f "${SCRIPT_DIR}/.env"                     "${DATA_DIR}/.env"
+  cp -f "${SCRIPT_DIR}/default.conf.template"    "${DATA_DIR}/default.conf.template"
   ok "Files copied to ${DATA_DIR}."
-  info "You can run docker-compose from either ${SCRIPT_DIR} or ${DATA_DIR}."
 fi
 
 # ---- Validate compose file --------------------------------------------------
 info "Validating compose file..."
-${COMPOSE_CMD} config --quiet 2>/dev/null && ok "Compose file is valid." || warn "Compose validation returned warnings (may be fine on first run)."
+${COMPOSE_CMD} config --quiet 2>/dev/null && ok "Compose file is valid." || warn "Compose validation had warnings (may be fine on first run)."
 
 # ---- Summary ----------------------------------------------------------------
 echo ""
@@ -150,29 +176,24 @@ echo "============================================="
 echo -e "  ${GREEN}Setup complete!${NC}"
 echo "============================================="
 echo ""
-echo "  Next steps:"
+echo "  Start the stack:"
+echo "    cd ${SCRIPT_DIR}"
+echo "    docker-compose up -d"
 echo ""
-echo "    1. Review .env and confirm your Unraid IP is set:"
-echo "         nano ${ENV_FILE}"
+echo "  Access Rocket.Chat:"
+echo "    HTTP   → http://${NGINX_HOST}:${NGINX_HTTP_PORT}"
+echo "    HTTPS  → https://${NGINX_HOST}:${NGINX_HTTPS_PORT}"
+echo "    Direct → http://${NGINX_HOST}:${RC_HOST_PORT}"
 echo ""
-echo "    2. Start the stack:"
-echo "         cd ${SCRIPT_DIR}"
-echo "         docker-compose up -d"
-echo ""
-echo "    3. Access Rocket.Chat:"
-echo "         HTTP  → http://${NGINX_HOST}:${NGINX_HTTP_PORT}"
-echo "         HTTPS → https://${NGINX_HOST}:${NGINX_HTTPS_PORT}"
-echo "         Direct→ http://${NGINX_HOST}:${RC_HOST_PORT}"
-echo ""
-echo "    4. First-run wizard will guide you through admin setup."
+echo "  First-run wizard will guide you through admin account setup."
 echo ""
 echo "  Useful commands:"
 echo "    docker-compose logs -f              # Tail all logs"
 echo "    docker-compose logs -f rocketchat   # Tail Rocket.Chat only"
 echo "    docker-compose down                 # Stop all services"
-echo "    docker-compose pull && docker-compose up -d  # Update images"
+echo "    docker-compose pull && docker-compose up -d  # Update"
 echo ""
-echo "  To replace the self-signed cert with a real one:"
+echo "  Replace self-signed cert:"
 echo "    cp your-cert.pem ${CERT_DIR}/rocketchat.crt"
 echo "    cp your-key.pem  ${CERT_DIR}/rocketchat.key"
 echo "    docker-compose restart nginx"
