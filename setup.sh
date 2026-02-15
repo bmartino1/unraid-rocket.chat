@@ -32,8 +32,7 @@ info "Working directory: ${SCRIPT_DIR}"
 # ---- Load .env if present ---------------------------------------------------
 ENV_FILE="${SCRIPT_DIR}/.env"
 if [ ! -f "${ENV_FILE}" ]; then
-  warn ".env not found – copying from .env to create defaults."
-  warn "Please edit .env with your IP / domain before running 'docker compose up -d'."
+  fail ".env file not found! Copy .env from the repo or create one. See README.md."
 fi
 
 # Source .env for variable expansion (with safe defaults)
@@ -46,16 +45,19 @@ set +a
 : "${NGINX_HOST:=localhost}"
 : "${NGINX_HTTPS_PORT:=60443}"
 : "${NGINX_HTTP_PORT:=60080}"
+: "${RC_HOST_PORT:=3000}"
 
 echo ""
 echo "============================================="
 echo "  Rocket.Chat Unraid Stack Setup"
 echo "============================================="
 echo ""
+info "SCRIPT_DIR     = ${SCRIPT_DIR}"
 info "DATA_DIR       = ${DATA_DIR}"
 info "NGINX_HOST     = ${NGINX_HOST}"
 info "NGINX_HTTPS    = ${NGINX_HTTPS_PORT}"
 info "NGINX_HTTP     = ${NGINX_HTTP_PORT}"
+info "RC_DIRECT_PORT = ${RC_HOST_PORT}"
 echo ""
 
 # ---- Prerequisite checks ----------------------------------------------------
@@ -64,33 +66,34 @@ info "Checking prerequisites..."
 command -v docker >/dev/null 2>&1 || fail "Docker is not installed or not in PATH."
 ok "Docker found: $(docker --version 2>/dev/null | head -1)"
 
-# Check docker compose (plugin or standalone)
-if docker compose version >/dev/null 2>&1; then
+# Unraid Compose Manager plugin uses docker-compose (hyphenated)
+if command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+  ok "docker-compose found."
+elif docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD="docker compose"
   ok "Docker Compose plugin found."
-elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE_CMD="docker-compose"
-  ok "docker-compose (standalone) found."
 else
-  fail "Docker Compose is not installed. Install the docker compose plugin."
+  fail "Docker Compose is not installed. Install the Compose Manager plugin from Unraid CA."
 fi
 
 command -v openssl >/dev/null 2>&1 || fail "OpenSSL is not installed (needed for TLS cert generation)."
 ok "OpenSSL found."
 
-# ---- Create persistent directories -----------------------------------------
+# ---- Create persistent data directories ------------------------------------
 info "Creating data directories under ${DATA_DIR} ..."
 
 DIRS=(
   "${DATA_DIR}/mongodb"
   "${DATA_DIR}/uploads"
+  "${DATA_DIR}/nginx"
   "${DATA_DIR}/nginx/certs"
 )
 
 for dir in "${DIRS[@]}"; do
   mkdir -p "${dir}"
 done
-ok "Directories created."
+ok "Data directories created."
 
 # ---- Generate self-signed TLS certificate -----------------------------------
 CERT_DIR="${DATA_DIR}/nginx/certs"
@@ -114,34 +117,32 @@ else
   info "  Key:  ${CERT_KEY}"
 fi
 
-# ---- Write Nginx configuration from template --------------------------------
-NGINX_TEMPLATE="${SCRIPT_DIR}/nginx/default.conf.template"
+# ---- Write Nginx config from template ---------------------------------------
+NGINX_TEMPLATE="${SCRIPT_DIR}/default.conf.template"
 NGINX_CONF="${DATA_DIR}/nginx/default.conf"
 
 if [ ! -f "${NGINX_TEMPLATE}" ]; then
   fail "Nginx template not found at ${NGINX_TEMPLATE}"
 fi
 
-info "Writing Nginx config..."
+info "Writing Nginx config from template..."
 sed "s|__HTTPS_PORT__|${NGINX_HTTPS_PORT}|g" \
   "${NGINX_TEMPLATE}" > "${NGINX_CONF}"
 ok "Nginx config written to ${NGINX_CONF}"
 
-# ---- Copy compose.yml + .env into DATA_DIR if running from a different path -
+# ---- Copy compose + env into DATA_DIR if running from different location ----
 if [ "${SCRIPT_DIR}" != "${DATA_DIR}" ]; then
-  info "Copying compose files to ${DATA_DIR} ..."
-  cp -f "${SCRIPT_DIR}/compose.yml" "${DATA_DIR}/compose.yml"
-  cp -f "${SCRIPT_DIR}/.env"        "${DATA_DIR}/.env"
-  # Copy template too for future re-runs
-  mkdir -p "${DATA_DIR}/nginx"
-  cp -f "${NGINX_TEMPLATE}" "${DATA_DIR}/nginx/default.conf.template"
-  ok "Files copied. You can run docker compose from ${DATA_DIR}."
+  info "Copying compose files into ${DATA_DIR} ..."
+  cp -f "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
+  cp -f "${SCRIPT_DIR}/.env"               "${DATA_DIR}/.env"
+  cp -f "${SCRIPT_DIR}/default.conf.template" "${DATA_DIR}/default.conf.template"
+  ok "Files copied to ${DATA_DIR}."
+  info "You can run docker-compose from either ${SCRIPT_DIR} or ${DATA_DIR}."
 fi
 
 # ---- Validate compose file --------------------------------------------------
 info "Validating compose file..."
-cd "${DATA_DIR}" 2>/dev/null || cd "${SCRIPT_DIR}"
-${COMPOSE_CMD} config --quiet 2>/dev/null && ok "Compose file is valid." || warn "Compose validation returned warnings (may be fine)."
+${COMPOSE_CMD} config --quiet 2>/dev/null && ok "Compose file is valid." || warn "Compose validation returned warnings (may be fine on first run)."
 
 # ---- Summary ----------------------------------------------------------------
 echo ""
@@ -151,28 +152,28 @@ echo "============================================="
 echo ""
 echo "  Next steps:"
 echo ""
-echo "    1. Edit .env and set your Unraid IP / domain:"
+echo "    1. Review .env and confirm your Unraid IP is set:"
 echo "         nano ${ENV_FILE}"
 echo ""
 echo "    2. Start the stack:"
-echo "         cd ${DATA_DIR}"
-echo "         docker compose up -d"
+echo "         cd ${SCRIPT_DIR}"
+echo "         docker-compose up -d"
 echo ""
 echo "    3. Access Rocket.Chat:"
 echo "         HTTP  → http://${NGINX_HOST}:${NGINX_HTTP_PORT}"
 echo "         HTTPS → https://${NGINX_HOST}:${NGINX_HTTPS_PORT}"
-echo "         Direct→ http://${NGINX_HOST}:3000"
+echo "         Direct→ http://${NGINX_HOST}:${RC_HOST_PORT}"
 echo ""
 echo "    4. First-run wizard will guide you through admin setup."
 echo ""
 echo "  Useful commands:"
-echo "    docker compose logs -f              # Tail all logs"
-echo "    docker compose logs -f rocketchat   # Tail Rocket.Chat only"
-echo "    docker compose down                 # Stop all services"
-echo "    docker compose pull && docker compose up -d  # Update images"
+echo "    docker-compose logs -f              # Tail all logs"
+echo "    docker-compose logs -f rocketchat   # Tail Rocket.Chat only"
+echo "    docker-compose down                 # Stop all services"
+echo "    docker-compose pull && docker-compose up -d  # Update images"
 echo ""
 echo "  To replace the self-signed cert with a real one:"
 echo "    cp your-cert.pem ${CERT_DIR}/rocketchat.crt"
 echo "    cp your-key.pem  ${CERT_DIR}/rocketchat.key"
-echo "    docker compose restart nginx"
+echo "    docker-compose restart nginx"
 echo ""

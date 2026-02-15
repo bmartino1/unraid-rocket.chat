@@ -1,5 +1,5 @@
 ###############################################################################
-#  Rocket.Chat – Unraid Multi-Stack Compose
+#  Rocket.Chat – Unraid Multi-Stack Docker Compose
 #  https://github.com/bmartino1/unraid-rocket.chat
 #
 #  Services: MongoDB 8 (replica-set) · NATS · Rocket.Chat · Nginx reverse proxy
@@ -8,12 +8,12 @@
 #    1.  git clone https://github.com/bmartino1/unraid-rocket.chat.git \
 #            /mnt/user/appdata/unraid-rocket.chat
 #    2.  cd /mnt/user/appdata/unraid-rocket.chat && bash setup.sh
-#    3.  docker compose up -d
+#    3.  docker-compose up -d
 #
-#  Ports exposed on the Unraid host:
+#  Ports exposed on the Unraid host (avoids 80/443 conflict with Unraid WebUI):
 #    60080  → HTTP  (Nginx → Rocket.Chat)
 #    60443  → HTTPS (Nginx → Rocket.Chat, self-signed by default)
-#    3000   → Direct Rocket.Chat (optional, disable in .env)
+#    3000   → Direct Rocket.Chat (optional, disable via RC_HOST_PORT in .env)
 ###############################################################################
 
 networks:
@@ -79,10 +79,10 @@ services:
       retries: 12
       start_period: 30s
     labels:
-      folder.view: "rocketchat"
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.webui: ""
-      net.unraid.docker.icon: "${UNRAID_ICON}"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/mongodb.png"
+      net.unraid.docker.shell: "/bin/bash"
+      folder.view: "rocketchat"
 
   # ===================================================================
   #  NATS  –  Microservices transport
@@ -101,10 +101,10 @@ services:
       retries: 5
       start_period: 5s
     labels:
-      folder.view: "rocketchat"
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.webui: ""
-      net.unraid.docker.icon: "${UNRAID_ICON}"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/nats.png"
+      net.unraid.docker.shell: "/bin/sh"
+      folder.view: "rocketchat"
 
   # ===================================================================
   #  Rocket.Chat  –  Application server
@@ -144,7 +144,7 @@ services:
       OVERWRITE_SETTING_Prometheus_Enabled: "${PROMETHEUS_ENABLED:-true}"
       OVERWRITE_SETTING_Prometheus_Port: "${METRICS_PORT:-9458}"
     ports:
-      # Direct access – comment out if you only want Nginx
+      # Direct access – set RC_HOST_PORT= (empty) in .env to disable
       - "${RC_BIND_IP:-0.0.0.0}:${RC_HOST_PORT:-3000}:${RC_PORT:-3000}"
     volumes:
       - ${DATA_DIR:-/mnt/user/appdata/unraid-rocket.chat}/uploads:/app/uploads
@@ -155,10 +155,11 @@ services:
       retries: 15
       start_period: 60s
     labels:
-      folder.view: "rocketchat"
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "http://[IP]:[PORT:3000]"
-      net.unraid.docker.icon: "${UNRAID_ICON}"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/rocketchat.png"
+      net.unraid.docker.shell: "/bin/bash"
+      folder.view: "rocketchat"
 
   # ===================================================================
   #  Nginx  –  Reverse proxy (HTTP 60080 / HTTPS 60443)
@@ -185,7 +186,8 @@ services:
       retries: 5
       start_period: 10s
     labels:
-      folder.view: "rocketchat"
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.webui: "https://[IP]:${NGINX_HTTPS_PORT:-60443}"
-      net.unraid.docker.icon: "${UNRAID_ICON}"
+      net.unraid.docker.webui: "https://[IP]:[PORT:443]"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/nginx.png"
+      net.unraid.docker.shell: "/bin/sh"
+      folder.view: "rocketchat"
