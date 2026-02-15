@@ -1,8 +1,8 @@
 # 🚀 unraid-rocket.chat
 
-**Turn-key Rocket.Chat stack for Unraid** — one `git clone`, one `setup.sh`, one `docker-compose up -d`.
+**Turn-key Rocket.Chat stack for Unraid** — `git clone`, edit `.env`, run `setup.sh`, `docker-compose up -d`.
 
-This project replaces the AIO (all-in-one) Docker approach with a proper multi-container stack using **official upstream images**. That means Rocket.Chat, MongoDB, and NATS all receive their own security updates directly from their maintainers.
+Replaces the AIO (all-in-one) Docker image with a proper multi-container stack using **official upstream images** so each service gets its own security updates.
 
 ---
 
@@ -13,9 +13,9 @@ This project replaces the AIO (all-in-one) Docker approach with a proper multi-c
 | **MongoDB 8** | `mongodb/mongodb-community-server:8.2-ubi8` | Database with automatic replica-set init |
 | **NATS** | `nats:2.11-alpine` | Microservices message transport |
 | **Rocket.Chat** | `registry.rocket.chat/rocketchat/rocket.chat:latest` | Chat application (text, voice, video) |
-| **Nginx** | `nginx:stable-alpine` | Reverse proxy (HTTP 60080 / HTTPS 60443) |
+| **Nginx** | `nginx:stable-alpine` | Reverse proxy with TLS (HTTP 60080 / HTTPS 60443) |
 
-All services run on a dedicated `rocketchat_net` bridge network. Containers are grouped under the `rocketchat` folder in the Unraid Docker tab via compose labels.
+All services run on a dedicated `rocketchat_net` bridge network and are grouped under the `rocketchat` folder in the Unraid Docker tab.
 
 ---
 
@@ -30,21 +30,23 @@ All services run on a dedicated `rocketchat_net` bridge network. Containers are 
 ### Install
 
 ```bash
-# Clone into Unraid appdata
+# 1. Clone into Unraid appdata
 git clone https://github.com/bmartino1/unraid-rocket.chat.git \
     /mnt/user/appdata/unraid-rocket.chat
 
 cd /mnt/user/appdata/unraid-rocket.chat
 
-# Edit .env — at minimum, set your Unraid IP address
+# 2. !! EDIT .env — You MUST set your Unraid IP !!
 nano .env
 
-# Run setup (creates dirs, generates self-signed TLS cert, writes Nginx config)
+# 3. Run setup (creates dirs, generates TLS cert, writes Nginx config)
 bash setup.sh
 
-# Start everything
+# 4. Start everything
 docker-compose up -d
 ```
+
+> **setup.sh will refuse to run if you haven't replaced `YOUR_UNRAID_IP` in .env.**
 
 ### Access
 
@@ -60,14 +62,19 @@ The first-run wizard will walk you through creating the admin account.
 
 ## Configuration (.env)
 
-All settings are in the `.env` file. Key values to change:
+Open `.env` in a text editor. **You must change at least two values** — both marked with `YOUR_UNRAID_IP`:
+
+| Variable | Default | What to set |
+|---|---|---|
+| **`NGINX_HOST`** | `YOUR_UNRAID_IP` | Your Unraid server's IP (e.g. `192.168.1.50`) |
+| **`ROOT_URL`** | `http://YOUR_UNRAID_IP:60080` | Full URL users type to reach Rocket.Chat |
+
+### Optional settings
 
 | Variable | Default | Description |
 |---|---|---|
-| `ROOT_URL` | `http://192.168.2.42:60080` | How users reach Rocket.Chat externally |
-| `NGINX_HOST` | `192.168.2.42` | IP/domain for the TLS certificate |
-| `NGINX_HTTP_PORT` | `60080` | HTTP port (Unraid uses 80) |
-| `NGINX_HTTPS_PORT` | `60443` | HTTPS port (Unraid uses 443) |
+| `NGINX_HTTP_PORT` | `60080` | HTTP port (use `80` if nginx is on br0) |
+| `NGINX_HTTPS_PORT` | `60443` | HTTPS port (use `443` if nginx is on br0) |
 | `RC_HOST_PORT` | `3000` | Direct access port (set empty to disable) |
 | `RC_RELEASE` | `latest` | Rocket.Chat version tag |
 | `MONGODB_VERSION` | `8.2-ubi8` | MongoDB version |
@@ -76,41 +83,43 @@ All settings are in the `.env` file. Key values to change:
 
 ---
 
+## Using br0 / macvlan / ipvlan (custom Docker network)
+
+If you assign the Nginx container its own static IP on a br0 custom network, it won't share ports with Unraid's WebUI, so you can use standard ports 80 and 443.
+
+**Steps:**
+
+1. In `.env`, set:
+   ```
+   NGINX_HTTP_PORT=80
+   NGINX_HTTPS_PORT=443
+   ROOT_URL=https://chat.yourdomain.com
+   NGINX_HOST=chat.yourdomain.com
+   ```
+
+2. In `docker-compose.yml`, add a custom network to the nginx service or change its `network_mode`. This is an advanced setup — refer to the Unraid Docker networking docs for creating br0/macvlan networks.
+
+3. Point your domain DNS to the Nginx container's static IP.
+
+---
+
 ## Directory Layout
 
 ```
 /mnt/user/appdata/unraid-rocket.chat/
 ├── docker-compose.yml          # Docker Compose stack definition
-├── .env                        # Environment configuration
+├── .env                        # ← EDIT THIS FIRST
 ├── setup.sh                    # One-time setup script
-├── default.conf.template       # Nginx config template (in git)
+├── default.conf.template       # Nginx config template
 ├── images/                     # Container icons (PNG) for Unraid Docker tab
-│   ├── rocketchat.png
-│   ├── mongodb.png
-│   ├── nats.png
-│   └── nginx.png
-├── nginx/                      # Created by setup.sh (gitignored)
+├── nginx/                      # Created by setup.sh
 │   ├── default.conf            # Generated Nginx config
 │   └── certs/
 │       ├── rocketchat.crt      # TLS certificate
 │       └── rocketchat.key      # TLS private key
-├── mongodb/                    # MongoDB data (gitignored)
-├── uploads/                    # Rocket.Chat file uploads (gitignored)
-├── README.md
-└── LICENSE
+├── mongodb/                    # MongoDB data
+└── uploads/                    # Rocket.Chat file uploads
 ```
-
----
-
-## Container Icons
-
-The `images/` folder holds PNG icons displayed in the Unraid Docker tab. The compose file references these icons from the GitHub repo via raw URLs:
-
-```
-https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/rocketchat.png
-```
-
-To use custom icons, replace the PNG files in `images/` and push to your fork, or update the `net.unraid.docker.icon` labels in `docker-compose.yml` to point to any URL serving a PNG image.
 
 ---
 
@@ -119,72 +128,57 @@ To use custom icons, replace the PNG files in `images/` and push to your fork, o
 ```bash
 cd /mnt/user/appdata/unraid-rocket.chat
 
-# Tail all logs
-docker-compose logs -f
-
-# Tail Rocket.Chat only
-docker-compose logs -f rocketchat
-
-# Check service health
-docker-compose ps
-
-# Stop everything
-docker-compose down
-
-# Update to latest images
-docker-compose pull
-docker-compose up -d
-
-# Restart Nginx after cert change
-docker-compose restart nginx
-
-# MongoDB shell access
-docker-compose exec mongodb mongosh
+docker-compose logs -f              # Tail all logs
+docker-compose logs -f rocketchat   # Tail Rocket.Chat only
+docker-compose ps                   # Check service health
+docker-compose down                 # Stop everything
+docker-compose pull                 # Pull latest images
+docker-compose up -d                # Start / apply changes
+docker-compose exec mongodb mongosh # MongoDB shell
 ```
 
 ---
 
 ## Using Real TLS Certificates
 
-The setup script generates a self-signed certificate. To replace it:
-
 ```bash
-# Copy your certificate and key
 cp /path/to/your-cert.pem /mnt/user/appdata/unraid-rocket.chat/nginx/certs/rocketchat.crt
 cp /path/to/your-key.pem  /mnt/user/appdata/unraid-rocket.chat/nginx/certs/rocketchat.key
-
-# Restart Nginx
 docker-compose restart nginx
 ```
 
-Update `ROOT_URL` in `.env` to use `https://your-domain:60443` and restart Rocket.Chat:
-
-```bash
-docker-compose up -d rocketchat
-```
+Update `ROOT_URL` in `.env` to `https://your-domain:60443` and run `docker-compose up -d rocketchat`.
 
 ---
 
 ## Why Not AIO?
 
-The AIO (all-in-one) image bundled MongoDB, NATS, Postfix, and Rocket.Chat into a single container. While convenient, it had significant drawbacks:
+The AIO image bundled MongoDB, NATS, Postfix, and Rocket.Chat into a single container:
 
-- **Update friction** — MongoDB and Rocket.Chat update on different cycles. A single image meant rebuilding everything for any update.
-- **MongoDB replica set issues** — Running mongod inside the app container led to PID management problems and unreliable replica-set initialization on Unraid.
-- **Debugging difficulty** — All logs mixed together, health checks couldn't target individual services.
-- **Upstream drift** — Rocket.Chat's own compose structure changed significantly (new NATS requirement, MongoDB 8 support, deprecated old compose files), making the AIO increasingly brittle.
+- **Update friction** — rebuilding everything for any single update
+- **MongoDB replica set issues** — unreliable init and PID management inside one container on Unraid
+- **Mixed logs** — impossible to debug individual services
+- **Upstream drift** — Rocket.Chat deprecated their old compose, added NATS requirement, moved to MongoDB 8
 
-The multi-container approach lets each service use its official image, get independent updates, and fail/restart independently.
+The multi-container stack lets each service run its official image independently.
 
 ---
 
 ## Troubleshooting
 
+**NATS fails to start / "unhealthy"**
+
+Check the NATS container logs:
+```bash
+docker-compose logs nats
+```
+If you see "flag provided but not defined", the NATS command has an invalid CLI flag. The current compose uses only `--http_port 8222` which is correct.
+
 **MongoDB won't start / replica set errors**
 ```bash
 docker-compose logs mongodb | tail -30
 ```
-If the data directory has stale lock files from a previous AIO:
+Stale lock files from a previous install:
 ```bash
 docker-compose down
 rm -f /mnt/user/appdata/unraid-rocket.chat/mongodb/mongod.lock
@@ -194,40 +188,46 @@ docker-compose up -d
 
 **Rocket.Chat exits with "oplog" errors**
 
-This means MongoDB isn't running as a replica set. The compose entrypoint handles this automatically, but if you migrated from a standalone MongoDB, the data may need re-initialization:
+MongoDB isn't running as a replica set. If migrating from standalone MongoDB:
 ```bash
 docker-compose down
-# WARNING: This deletes your database. Back up first if you have data.
+# WARNING: Deletes your database — back up first!
 rm -rf /mnt/user/appdata/unraid-rocket.chat/mongodb/*
-docker-compose up -d
-```
-
-**Port conflicts**
-
-If another service uses 60080/60443, change `NGINX_HTTP_PORT` and `NGINX_HTTPS_PORT` in `.env`, re-run `bash setup.sh`, then restart:
-```bash
-docker-compose down
-bash setup.sh
 docker-compose up -d
 ```
 
 **Nginx shows "502 Bad Gateway"**
 
-Rocket.Chat takes 30-90 seconds to start on first run. Check if it's still booting:
+Rocket.Chat takes 30-90 seconds on first start. Wait for `SERVER RUNNING` in logs:
 ```bash
 docker-compose logs -f rocketchat
 ```
 
-Wait for the line `SERVER RUNNING` before accessing via Nginx.
+**Port conflicts**
+
+Change `NGINX_HTTP_PORT` and `NGINX_HTTPS_PORT` in `.env`, re-run `bash setup.sh`, then:
+```bash
+docker-compose down && docker-compose up -d
+```
+
+---
+
+## Container Icons
+
+The compose file labels reference PNG icons from:
+```
+https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/
+```
+If icons don't display in the Unraid Docker tab, verify the PNG files exist at those URLs or update the `net.unraid.docker.icon` labels in `docker-compose.yml`.
 
 ---
 
 ## Credits
 
-- [Rocket.Chat](https://github.com/RocketChat/Rocket.Chat) — the application
-- [RocketChat/rocketchat-compose](https://github.com/RocketChat/rocketchat-compose) — official multi-file compose reference
-- [bmartino1/rocket.chat](https://github.com/bmartino1/rocket.chat) — AIO image and Unraid community support
-- [Unraid forums](https://forums.unraid.net/topic/61337-support-rocketchat/) — community troubleshooting
+- [Rocket.Chat](https://github.com/RocketChat/Rocket.Chat)
+- [RocketChat/rocketchat-compose](https://github.com/RocketChat/rocketchat-compose) — official compose reference
+- [bmartino1/rocket.chat](https://github.com/bmartino1/rocket.chat) — AIO image & Unraid community support
+- [Unraid forums](https://forums.unraid.net/topic/61337-support-rocketchat/)
 
 ---
 
