@@ -79,7 +79,7 @@ services:
       start_period: 30s
     labels:
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/mongodb.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/jason-bean/docker-templates/master/jasonbean-repo/mongo.sh-600x600.png"
       net.unraid.docker.shell: "/bin/bash"
       folder.view: "rocketchat"
 
@@ -101,7 +101,7 @@ services:
       start_period: 5s
     labels:
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/nats.png"
+      net.unraid.docker.icon: "https://www.ibm.com/content/dam/adobe-cms/instana/media_logo/NATS.png/_jcr_content/renditions/cq5dam.web.1280.1280.png"
       net.unraid.docker.shell: "/bin/sh"
       folder.view: "rocketchat"
 
@@ -145,7 +145,7 @@ services:
     labels:
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "http://[IP]:[PORT:3000]"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/rocketchat.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/refs/heads/main/images/rocketchat.png"
       net.unraid.docker.shell: "/bin/bash"
       folder.view: "rocketchat"
 
@@ -175,7 +175,7 @@ services:
       start_period: 10s
     labels:
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.webui: "https://[IP]:[PORT:443]"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/nginx.png"
+      net.unraid.docker.webui: "https://[IP]:[PORT:60443]"
+      net.unraid.docker.icon: "https://nginxproxymanager.com/icon.png"
       net.unraid.docker.shell: "/bin/sh"
       folder.view: "rocketchat"
