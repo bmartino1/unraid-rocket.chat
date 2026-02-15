@@ -7,13 +7,20 @@
 #  Usage:
 #    1.  git clone https://github.com/bmartino1/unraid-rocket.chat.git \
 #            /mnt/user/appdata/unraid-rocket.chat
-#    2.  cd /mnt/user/appdata/unraid-rocket.chat && bash setup.sh
-#    3.  docker-compose up -d
+#    2.  cd /mnt/user/appdata/unraid-rocket.chat
+#    3.  nano .env          # Set your Unraid IP!
+#    4.  bash setup.sh
+#    5.  docker-compose up -d
 #
 #  Ports exposed on the Unraid host (avoids 80/443 conflict with Unraid WebUI):
 #    60080  → HTTP  (Nginx → Rocket.Chat)
 #    60443  → HTTPS (Nginx → Rocket.Chat, self-signed by default)
 #    3000   → Direct Rocket.Chat (optional, disable via RC_HOST_PORT in .env)
+#
+#  NOTE for br0/macvlan users:
+#    If you assign Nginx its own static IP on a custom Docker network (br0),
+#    you can change NGINX_HTTP_PORT=80 and NGINX_HTTPS_PORT=443 in .env
+#    since the dedicated IP won't conflict with Unraid's WebUI.
 ###############################################################################
 
 networks:
@@ -80,12 +87,15 @@ services:
       start_period: 30s
     labels:
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/mongodb.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/mongodb.png"
       net.unraid.docker.shell: "/bin/bash"
       folder.view: "rocketchat"
 
   # ===================================================================
-  #  NATS  –  Microservices transport
+  #  NATS  –  Microservices transport for Rocket.Chat
+  #
+  #  NOTE: max_payload is NOT a CLI flag. If you need to increase it
+  #  beyond the 1MB default, mount a nats-server.conf file instead.
   # ===================================================================
   nats:
     image: docker.io/nats:${NATS_VERSION:-2.11-alpine}
@@ -93,16 +103,16 @@ services:
     restart: unless-stopped
     networks:
       - rocketchat_net
-    command: --http_port 8222 --max_payload 1048576
+    command: "--http_port 8222"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8222/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8222/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
     labels:
       net.unraid.docker.managed: "composeman"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/nats.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/nats.png"
       net.unraid.docker.shell: "/bin/sh"
       folder.view: "rocketchat"
 
@@ -157,7 +167,7 @@ services:
     labels:
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "http://[IP]:[PORT:3000]"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/rocketchat.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/rocketchat-aio.png"
       net.unraid.docker.shell: "/bin/bash"
       folder.view: "rocketchat"
 
@@ -188,6 +198,6 @@ services:
     labels:
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "https://[IP]:[PORT:443]"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-rocket.chat/main/images/nginx.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/nginx.png"
       net.unraid.docker.shell: "/bin/sh"
       folder.view: "rocketchat"
