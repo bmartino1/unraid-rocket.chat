@@ -35,6 +35,7 @@ git clone https://github.com/bmartino1/unraid-rocket.chat.git \
     /mnt/user/appdata/unraid-rocket.chat
 
 cd /mnt/user/appdata/unraid-rocket.chat
+chmod 777 _r *
 
 # 2. !! EDIT .env — You MUST set your Unraid IP !!
 nano .env
