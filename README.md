@@ -41,10 +41,12 @@ nano .env
 
 # 3. Run setup (creates dirs, generates TLS cert, writes Nginx config)
 bash setup.sh
+```
 
+It is best to add the stack to the urnaid web UI at this step. and use the Web UI...
 # 4. Start everything
 docker-compose up -d
-```
+
 
 > **setup.sh will refuse to run if you haven't replaced `YOUR_UNRAID_IP` in .env.**
 
