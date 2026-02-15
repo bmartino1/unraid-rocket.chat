@@ -2,25 +2,17 @@
 #  Rocket.Chat – Unraid Multi-Stack Docker Compose
 #  https://github.com/bmartino1/unraid-rocket.chat
 #
-#  Services: MongoDB 8 (replica-set) · NATS · Rocket.Chat · Nginx reverse proxy
+#  Services: MongoDB 8 · NATS · Rocket.Chat · Nginx reverse proxy
 #
-#  Usage:
-#    1.  git clone https://github.com/bmartino1/unraid-rocket.chat.git \
-#            /mnt/user/appdata/unraid-rocket.chat
-#    2.  cd /mnt/user/appdata/unraid-rocket.chat
-#    3.  nano .env          # Set your Unraid IP!
-#    4.  bash setup.sh
-#    5.  docker-compose up -d
+#  Before first run:
+#    1. Edit .env — set YOUR_UNRAID_IP
+#    2. Run: bash setup.sh
+#    3. Start from Unraid Compose Manager GUI  -or-  docker-compose up -d
 #
-#  Ports exposed on the Unraid host (avoids 80/443 conflict with Unraid WebUI):
-#    60080  → HTTP  (Nginx → Rocket.Chat)
-#    60443  → HTTPS (Nginx → Rocket.Chat, self-signed by default)
-#    3000   → Direct Rocket.Chat (optional, disable via RC_HOST_PORT in .env)
-#
-#  NOTE for br0/macvlan users:
-#    If you assign Nginx its own static IP on a custom Docker network (br0),
-#    you can change NGINX_HTTP_PORT=80 and NGINX_HTTPS_PORT=443 in .env
-#    since the dedicated IP won't conflict with Unraid's WebUI.
+#  Ports (avoids 80/443 conflict with Unraid WebUI):
+#    60080  → HTTP   (Nginx)
+#    60443  → HTTPS  (Nginx)
+#    3000   → Direct (Rocket.Chat, optional)
 ###############################################################################
 
 networks:
@@ -31,7 +23,7 @@ networks:
 services:
 
   # ===================================================================
-  #  MongoDB  –  Community Server with automatic replica-set init
+  #  MongoDB – replica-set with automatic init
   # ===================================================================
   mongodb:
     image: mongodb/mongodb-community-server:${MONGODB_VERSION:-8.2-ubi8}
@@ -49,7 +41,7 @@ services:
       bash -c "
         mongod --replSet $${MONGODB_REPLICA_SET_NAME} --bind_ip_all --port $${MONGODB_PORT_NUMBER} &
         MONGOD_PID=$$!;
-        echo '[mongo-init] Waiting for mongod to accept connections...';
+        echo '[mongo-init] Waiting for mongod...';
         for i in $$(seq 1 60); do
           if mongosh --port $${MONGODB_PORT_NUMBER} --quiet --eval \"db.adminCommand('ping')\" >/dev/null 2>&1; then
             break;
@@ -92,10 +84,7 @@ services:
       folder.view: "rocketchat"
 
   # ===================================================================
-  #  NATS  –  Microservices transport for Rocket.Chat
-  #
-  #  NOTE: max_payload is NOT a CLI flag. If you need to increase it
-  #  beyond the 1MB default, mount a nats-server.conf file instead.
+  #  NATS – microservices transport
   # ===================================================================
   nats:
     image: docker.io/nats:${NATS_VERSION:-2.11-alpine}
@@ -117,7 +106,7 @@ services:
       folder.view: "rocketchat"
 
   # ===================================================================
-  #  Rocket.Chat  –  Application server
+  #  Rocket.Chat – application server
   # ===================================================================
   rocketchat:
     image: ${RC_IMAGE:-registry.rocket.chat/rocketchat/rocket.chat}:${RC_RELEASE:-latest}
@@ -134,27 +123,16 @@ services:
       ROOT_URL: ${ROOT_URL:-http://localhost:60080}
       PORT: ${RC_PORT:-3000}
       BIND_IP: "0.0.0.0"
-
-      # MongoDB
       MONGO_URL: "mongodb://mongodb:${MONGO_PORT:-27017}/${MONGO_DB:-rocketchat}?replicaSet=${MONGO_RS:-rs0}"
       MONGO_OPLOG_URL: "mongodb://mongodb:${MONGO_PORT:-27017}/local?replicaSet=${MONGO_RS:-rs0}"
-
-      # NATS transport
       TRANSPORTER: "nats://nats:4222"
-
-      # Deployment metadata
       DEPLOY_METHOD: docker
       DEPLOY_PLATFORM: compose-unraid
-
-      # Registration token (optional – obtain from cloud.rocket.chat)
       REG_TOKEN: ${REG_TOKEN:-}
-
-      # Prometheus metrics (optional, harmless if unused)
       LICENSE_DEBUG: "true"
       OVERWRITE_SETTING_Prometheus_Enabled: "${PROMETHEUS_ENABLED:-true}"
       OVERWRITE_SETTING_Prometheus_Port: "${METRICS_PORT:-9458}"
     ports:
-      # Direct access – set RC_HOST_PORT= (empty) in .env to disable
       - "${RC_BIND_IP:-0.0.0.0}:${RC_HOST_PORT:-3000}:${RC_PORT:-3000}"
     volumes:
       - ${DATA_DIR:-/mnt/user/appdata/unraid-rocket.chat}/uploads:/app/uploads
@@ -167,12 +145,12 @@ services:
     labels:
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "http://[IP]:[PORT:3000]"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/rocketchat-aio.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/bmartino1/unraid-docker-templates/main/images/rocketchat.png"
       net.unraid.docker.shell: "/bin/bash"
       folder.view: "rocketchat"
 
   # ===================================================================
-  #  Nginx  –  Reverse proxy (HTTP 60080 / HTTPS 60443)
+  #  Nginx – reverse proxy (60080/60443)
   # ===================================================================
   nginx:
     image: docker.io/nginx:${NGINX_VERSION:-stable-alpine}
