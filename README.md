@@ -1,3 +1,16 @@
+Public Archive. More proof of concept to get restroed adn setup on UNriad.
+This is not a project I wish to support.. due to cost and intergrations its better to pay for a aws server...
+https://aws.amazon.com/marketplace/seller-profile?id=dcb2092b-ef39-40bd-bc7c-f2394fa75ba7
+run a free rocket.chat (50 users) Starting from $0.00 to $0.00/hr for software + AWS usage fees
+https://www.rocket.chat/partner/aws
+
+I rather have a full self hosted free solution..
+see 
+unraid guides https://forums.unraid.net/topic/127917-guide-matrix-synapse-w-postgres-db-chat-server-element-web-client-coturn-voice/
+LXC: https://github.com/bmartino1/unraid-lxc-matrix 
+Docker: https://github.com/bmartino1/matrix-textvoicevideo 
+
+
 # 🚀 unraid-rocket.chat
 
 **Turn-key Rocket.Chat stack for Unraid** using official upstream images with the **Compose Manager** plugin.
